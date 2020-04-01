@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+
+GPG="gpg"
+
+cmd_help(){
+	cat <<-_EOF
+	Usage:
+	  ipass [options] [file]
+	Options:
+	  help, --help, -h      print a usage message
+	  ls                    show all encrypted files
+	  enc [file]            encrypt new file
+	  dec [file]            decrypt encrypted file
+	  edit [file]           edit existing encrypted file
+	_EOF
+}
+
+# cmd_ls
+# cmd_enc
+# cmd_dec
+# cmd_edit
+
+case "$1" in
+	help|--help|-h) cmd_help;;
+	ls) echo "LS" ;;
+	enc) echo "encryption" ;;
+	dec) echo "decryption" ;;
+	edit) echo "EDIT" ;;
+esac
+
+exit 0
