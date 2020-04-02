@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
-GPG="gpg"
 STORAGE_FOLDER=$HOME/.spm_storage
-VERSION=0.3
+VERSION=0.4
 
 cmd_help(){
 	cat <<-_EOF
@@ -16,7 +15,7 @@ cmd_help(){
 	  dec [file]            decrypt encrypted file
 	  del [file]            delete chosen file
 	  edit [file]           edit existing encrypted file
-	  ver                   print spm version
+	  version               print spm version
 	_EOF
 }
 
@@ -108,6 +107,10 @@ cmd_edit(){
 	fi
 }
 
+cmd_ver(){
+	echo "$VERSION"
+}
+
 case "$1" in
 	help|--help|-h) cmd_help ;;
 	init) cmd_init ;;
@@ -116,6 +119,7 @@ case "$1" in
 	dec) shift; cmd_dec "$@" ;;
 	del) shift; cmd_del "$@" ;;
 	edit) shift; cmd_edit "$@" ;;
+	version) cmd_ver ;;
 esac
 
 exit 0
