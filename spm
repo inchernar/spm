@@ -1,31 +1,121 @@
 #!/usr/bin/env bash
 
 GPG="gpg"
+STORAGE_FOLDER=$HOME/.spm_storage
+VERSION=0.3
 
 cmd_help(){
 	cat <<-_EOF
 	Usage:
-	  ipass [options] [file]
-	Options:
-	  help, --help, -h      print a usage message
+	  spm [command]
+	Commands:
+	  help, --help, -h      print this message
+	  init                  initialize spm storage
 	  ls                    show all encrypted files
 	  enc [file]            encrypt new file
 	  dec [file]            decrypt encrypted file
+	  del [file]            delete chosen file
 	  edit [file]           edit existing encrypted file
+	  ver                   print spm version
 	_EOF
 }
 
-# cmd_ls
-# cmd_enc
-# cmd_dec
-# cmd_edit
+cmd_init(){
+	if [[ -d $STORAGE_FOLDER ]]
+	then
+		echo "SPM storage already exists in $STORAGE_FOLDER"
+	else
+		mkdir -p $STORAGE_FOLDER
+		echo "SPM storage initialized in $STORAGE_FOLDER"
+	fi
+}
+
+cmd_ls(){
+	if [[ -d $STORAGE_FOLDER ]]
+	then
+		echo "SPM storage:"
+		ls -1 $STORAGE_FOLDER
+	else
+		echo "SPM storage does not exist!"
+	fi
+}
+
+cmd_enc(){
+	if [[ -d $STORAGE_FOLDER ]]
+	then
+		if (( $# > 0 ))
+		then
+			nano "$STORAGE_FOLDER/$1.tmp"
+			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp"
+			rm "$STORAGE_FOLDER/$1.tmp"
+		else
+			echo "No encryption file specified!"
+		fi
+	else
+		echo "SPM storage does not exist!"
+	fi
+}
+
+cmd_dec(){
+	if [[ -d $STORAGE_FOLDER ]]
+	then
+		if [ -f "$STORAGE_FOLDER/$1" ]
+		then
+			gpg -d --no-symkey-cache "$STORAGE_FOLDER/$1"
+		else
+			echo "No decryption file specified!"
+		fi
+	else
+		echo "SPM storage does not exist!"
+	fi
+}
+
+cmd_del(){
+	if [[ -d $STORAGE_FOLDER ]]
+	then
+		if [ -f "$STORAGE_FOLDER/$1" ]
+		then
+			read -r -p "Are you sure? [y/N] " flag
+			flag=${flag:-N}
+			if [ $flag = "y" -o $flag = "Y" ]
+			then
+				rm "$STORAGE_FOLDER/$1"
+				echo "$1 removed"
+			fi
+		else
+			echo "File does not exist or not specified!"
+		fi
+	else
+		echo "SPM storage does not exist!"
+	fi
+}
+
+cmd_edit(){
+	if [[ -d $STORAGE_FOLDER ]]
+	then
+		if [ -f "$STORAGE_FOLDER/$1" ]
+		then
+			gpg -d --no-symkey-cache -o "$STORAGE_FOLDER/$1.tmp" "$STORAGE_FOLDER/$1"
+			nano "$STORAGE_FOLDER/$1.tmp"
+			rm "$STORAGE_FOLDER/$1"
+			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp"
+			rm "$STORAGE_FOLDER/$1.tmp"
+		else
+			echo "File does not exist or not specified!"
+		fi
+	else
+		echo "SPM storage does not exist!"
+	fi
+}
 
 case "$1" in
-	help|--help|-h) cmd_help;;
-	ls) echo "LS" ;;
-	enc) echo "encryption" ;;
-	dec) echo "decryption" ;;
-	edit) echo "EDIT" ;;
+	help|--help|-h) cmd_help ;;
+	init) cmd_init ;;
+	ls) cmd_ls ;;
+	enc) shift; cmd_enc "$@" ;;
+	dec) shift; cmd_dec "$@" ;;
+	del) shift; cmd_del "$@" ;;
+	edit) shift; cmd_edit "$@" ;;
 esac
 
 exit 0
