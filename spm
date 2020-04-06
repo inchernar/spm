@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
-source /etc/spm.conf
+if [[ -f /etc/spm.conf ]]
+then
+	source /etc/spm.conf
+fi
 
 if [[ -z $STORAGE_FOLDER ]]; then STORAGE_FOLDER=$HOME/.spm_storage; fi
-VERSION=0.6
+VERSION=0.7
 
 cmd_help(){
 	cat <<-_EOF
@@ -51,8 +54,7 @@ cmd_enc(){
 			mkdir -p "$(dirname "$STORAGE_FOLDER/$1")"
 			touch "$STORAGE_FOLDER/$1.tmp"
 			nano "$STORAGE_FOLDER/$1.tmp"
-			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp"
-			rm "$STORAGE_FOLDER/$1.tmp"
+			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp" && rm "$STORAGE_FOLDER/$1.tmp"
 		else
 			echo "No encryption file specified!"
 		fi
@@ -103,8 +105,7 @@ cmd_edit(){
 			gpg -d --no-symkey-cache -o "$STORAGE_FOLDER/$1.tmp" "$STORAGE_FOLDER/$1"
 			nano "$STORAGE_FOLDER/$1.tmp"
 			rm "$STORAGE_FOLDER/$1"
-			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp"
-			rm "$STORAGE_FOLDER/$1.tmp"
+			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp" && rm "$STORAGE_FOLDER/$1.tmp"
 		else
 			echo "File does not exist or not specified!"
 		fi
