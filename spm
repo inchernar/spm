@@ -1,7 +1,9 @@
 #!/usr/bin/env bash
 
-STORAGE_FOLDER=$HOME/.spm_storage
-VERSION=0.5
+source /etc/spm.conf
+
+if [[ -z $STORAGE_FOLDER ]]; then STORAGE_FOLDER=$HOME/.spm_storage; fi
+VERSION=0.6
 
 cmd_help(){
 	cat <<-_EOF
@@ -34,7 +36,8 @@ cmd_ls(){
 	then
 		echo "SPM storage:"
 		# ls -1 $STORAGE_FOLDER
-		tree $STORAGE_FOLDER
+		# tree $STORAGE_FOLDER
+		cd $STORAGE_FOLDER ; find . | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"; cd - > /dev/null
 	else
 		echo "SPM storage does not exist!"
 	fi

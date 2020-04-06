@@ -20,3 +20,5 @@ Requirements:
 * bash
 * gpg
 * nano
+
+From version 0.6 you can use `/etc/spm.conf` to override script variables (like `STORAGE_FOLDER`).
