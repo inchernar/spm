@@ -14,7 +14,7 @@ Commands:
   version               print spm version
 ```
 
-At initializing `spm` creates `.spm_storage` folder in user's home directory. That keeps encrypted files with credentials.
+At initializing `spm` creates `.spm_storage` (by default) folder in user's home directory. That keeps encrypted files with credentials.
 
 Requirements:
 * bash
