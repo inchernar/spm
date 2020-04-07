@@ -6,7 +6,7 @@ then
 fi
 
 if [[ -z $STORAGE_FOLDER ]]; then STORAGE_FOLDER=$HOME/.spm_storage; fi
-VERSION=0.7
+VERSION=0.8
 
 cmd_help(){
 	cat <<-_EOF
@@ -51,10 +51,15 @@ cmd_enc(){
 	then
 		if (( $# > 0 ))
 		then
-			mkdir -p "$(dirname "$STORAGE_FOLDER/$1")"
-			touch "$STORAGE_FOLDER/$1.tmp"
-			nano "$STORAGE_FOLDER/$1.tmp"
-			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp" && rm "$STORAGE_FOLDER/$1.tmp"
+			if [[ -f "$STORAGE_FOLDER/$1" ]]
+			then
+				echo 'File already exists!'
+			else
+				mkdir -p "$(dirname "$STORAGE_FOLDER/$1")"
+				touch "$STORAGE_FOLDER/$1.tmp"
+				nano "$STORAGE_FOLDER/$1.tmp"
+				gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp" && rm "$STORAGE_FOLDER/$1.tmp"
+			fi
 		else
 			echo "No encryption file specified!"
 		fi
