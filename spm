@@ -56,7 +56,7 @@ load_config(){
 	EDITOR_EDIT_OPTIONS="-l"
 	EDITOR_VIEW_OPTIONS="-v -l"
 	ERROR_LOG=/dev/null
-	VERSION=1.0rc1
+	VERSION=1.0rc2
 
 	# Load global configuration
 	GLOBAL_CONFIG=/etc/spm.conf
@@ -120,15 +120,19 @@ cmd_help(){
 	Usage:
 	  spm [command]
 	Commands:
-	  help, --help, -h      print this message
-	  init                  initialize spm key storage
-	  ls                    show all records
-	  new [record]          create new record
-	  view [record]         view existing record
-	  rm [record]           remove existing record
-	  edit [record]         edit existing record
-	  config                print spm aggregated config
-	  version               print spm version
+	  help, --help, -h          print this message
+	  init                      initialize spm key storage
+	  ls                        show all records
+	  new  [record]             create new record
+	  view [record]             view specified record
+	  edit [record]             edit specified record
+	  rm   [record]             remove specified record
+	  new-folder    [folder]    create new folder
+	  rename-folder [folder]    edit specified folder name
+	  rm-folder     [folder]    remove specified folder
+	  clear                     forced temporary files removal 
+	  config                    print spm aggregated config
+	  version                   print spm version
 	_EOF
 }
 
@@ -147,7 +151,7 @@ cmd_init(){
 	check_tmp_storage_existence
 	status=$?
 	if (( $status != 0 )); then
-		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
+		print_warning "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
 	fi
 }
 
@@ -164,7 +168,7 @@ cmd_ls(){
 	check_tmp_storage_existence
 	status=$?
 	if (( $status != 0 )); then
-		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
+		print_warning "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
 	fi
 
 	tree -L 2 "${SPM_KEY_STORAGE}"
@@ -178,6 +182,13 @@ cmd_new(){
 	status=$?
 	if (( $status != 0 )); then
 		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
 		exit $status
 	fi
 
@@ -206,7 +217,7 @@ cmd_new(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
@@ -215,7 +226,7 @@ cmd_new(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 	
@@ -224,12 +235,14 @@ cmd_new(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
 	# Clean all temporary files
-	rm -f "${TMP_FILE}"*
+	cmd_clear_tmp
+
+	print_success "Record '${RECORD_NAME}' successfully added!"
 }
 
 #-------------------------------------------------------------------------------
@@ -239,6 +252,13 @@ cmd_view(){
 	status=$?
 	if (( $status != 0 )); then
 		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
 		exit $status
 	fi
 
@@ -267,7 +287,7 @@ cmd_view(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
@@ -276,12 +296,12 @@ cmd_view(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
 	# Clean all temporary files
-	rm -f "${TMP_FILE}"*
+	cmd_clear_tmp
 }
 
 #-------------------------------------------------------------------------------
@@ -315,7 +335,7 @@ cmd_rm(){
 	status=$?
 	if (( $status == 0 )); then
 		rm "${RECORD_FILE}"
-		print_success "${RECORD_NAME} successfully removed!"
+		print_success "Record ${RECORD_NAME} successfully removed!"
 	else
 		print_warning "removing rejected!"
 	fi
@@ -328,6 +348,13 @@ cmd_edit(){
 	status=$?
 	if (( $status != 0 )); then
 		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
 		exit $status
 	fi
 
@@ -356,7 +383,7 @@ cmd_edit(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
@@ -368,7 +395,7 @@ cmd_edit(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
@@ -378,7 +405,7 @@ cmd_edit(){
 	# Hash comparision
 	if [[ $hash_before == $hash_after ]]; then
 		print_error "record has not been edited. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
@@ -387,7 +414,7 @@ cmd_edit(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 	
@@ -396,18 +423,130 @@ cmd_edit(){
 	status=$?
 	if (( status != 0 )); then
 		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
-		rm -f "${TMP_FILE}"*
+		cmd_clear_tmp
 		exit 1
 	fi
 
 	# Clean all temporary files
-	rm -f "${TMP_FILE}"*
+	cmd_clear_tmp
 }
 
 #-------------------------------------------------------------------------------
 
 cmd_print_version(){
 	echo "$VERSION"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_new_folder(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	# Check folder specification
+	if (( $# == 0 )); then
+		print_error "no folder specified!"
+		exit 1
+	fi
+
+	# Name creation for folder file
+	FOLDER_NAME="${1}"
+	FOLDER_PATH="${SPM_KEY_STORAGE}/${FOLDER_NAME}"
+
+	# Check folder existence
+	if [[ -d "${FOLDER_PATH}" ]]; then
+		print_error "folder '${FOLDER_NAME}' already exists!"
+		exit 1
+	fi
+
+	mkdir -p "${FOLDER_PATH}"
+	print_success "Folder '${FOLDER_NAME}' successfully added!"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_rename_folder(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	# Check folder specification
+	if (( $# == 0 )); then
+		print_error "no folder specified!"
+		exit 1
+	fi
+
+	# Name creation for folder
+	FOLDER_NAME="${1}"
+	FOLDER_PATH="${SPM_KEY_STORAGE}/${FOLDER_NAME}"
+
+	# Check folder existence
+	if [[ ! -d "${FOLDER_PATH}" ]]; then
+		print_error "specified folder does not exist!"
+		exit 1
+	fi
+
+	read -r -p "Enter new folder name: " NEW_FOLDER_NAME
+	NEW_FOLDER_PATH="${SPM_KEY_STORAGE}/${NEW_FOLDER_NAME}"
+	mv "${FOLDER_PATH}" "${NEW_FOLDER_PATH}"
+	print_success "Folder '${FOLDER_NAME}' renamed to '${NEW_FOLDER_NAME}'!"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_rm_folder(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	# Check folder specification
+	if (( $# == 0 )); then
+		print_error "no folder specified!"
+		exit 1
+	fi
+
+	# Name creation for folder
+	FOLDER_NAME="${1}"
+	FOLDER_PATH="${SPM_KEY_STORAGE}/${FOLDER_NAME}"
+
+	# Check folder existence
+	if [[ ! -d "${FOLDER_PATH}" ]]; then
+		print_error "specified folder does not exist!"
+		exit 1
+	fi
+
+	# Folder removing
+	confirmation
+	status=$?
+	if (( $status == 0 )); then
+		rm -rf "${FOLDER_PATH}"
+		print_success "Folder ${FOLDER_NAME} successfully removed!"
+	else
+		print_warning "removing rejected!"
+	fi
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_clear_tmp(){
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
+		exit $status
+	fi
+
+	rm -f "${TMP_STORAGE}"/*
 }
 
 ################################################################################
@@ -425,6 +564,10 @@ main(){
 		view) shift; cmd_view "$@" ;;
 		rm) shift; cmd_rm "$@" ;;
 		edit) shift; cmd_edit "$@" ;;
+		new-folder) shift; cmd_new_folder "$@" ;;
+		rename-folder) shift; cmd_rename_folder "$@" ;;
+		rm-folder) shift; cmd_rm_folder "$@" ;;
+		clear) cmd_clear_tmp ;;
 		config) cmd_print_config ;;
 		version) cmd_print_version ;;
 	esac
