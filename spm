@@ -53,10 +53,12 @@ load_config(){
 	SPM_KEY_STORAGE="${HOME}"/.spm/storage
 	TMP_STORAGE=/tmp
 	EDITOR=nano
-	EDITOR_EDIT_OPTIONS="-l"
-	EDITOR_VIEW_OPTIONS="-v -l"
+	EDITOR_EDIT_OPTIONS=-l
+	EDITOR_VIEW_OPTIONS='-v -l'
+	CLIPBOARD_APP=xclip
+	CLIPBOARD_APP_OPTIONS='-selection clipboard'
 	ERROR_LOG=/dev/null
-	VERSION=1.0rc2
+	VERSION=1.0rc3
 
 	# Load global configuration
 	GLOBAL_CONFIG=/etc/spm.conf
@@ -109,6 +111,8 @@ cmd_print_config(){
 	print_config_row EDITOR
 	print_config_row EDITOR_EDIT_OPTIONS
 	print_config_row EDITOR_VIEW_OPTIONS
+	print_config_row CLIPBOARD_APP
+	print_config_row CLIPBOARD_APP_OPTIONS
 	print_config_row ERROR_LOG
 	print_config_row VERSION
 }
@@ -127,6 +131,8 @@ cmd_help(){
 	  view [record]             view specified record
 	  edit [record]             edit specified record
 	  rm   [record]             remove specified record
+	  cpl, copy-login [record]  copy record's login on the clipboard
+	  cpp, copy-pass  [record]  copy record's password on the clipboard
 	  new-folder    [folder]    create new folder
 	  rename-folder [folder]    edit specified folder name
 	  rm-folder     [folder]    remove specified folder
@@ -198,7 +204,7 @@ cmd_new(){
 		exit 1
 	fi
 
-	# Name creation for record file
+	# Record filename creation
 	RECORD_NAME="${1}"
 	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
 
@@ -213,7 +219,7 @@ cmd_new(){
 	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
 
 	# Typing record in tmp file with set editor
-	${EDITOR} ${EDITOR_EDIT_OPTIONS} "${TMP_FILE}" 2>"${ERROR_LOG}"
+	eval "${EDITOR} ${EDITOR_EDIT_OPTIONS} ${TMP_FILE} 2>${ERROR_LOG}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
@@ -268,7 +274,7 @@ cmd_view(){
 		exit 1
 	fi
 
-	# Name creation for record file
+	# Record filename creation
 	RECORD_NAME="${1}"
 	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
 
@@ -292,7 +298,7 @@ cmd_view(){
 	fi
 
 	# Open in editor to view (view mode enabled if available)
-	${EDITOR} ${EDITOR_VIEW_OPTIONS} "${TMP_FILE}" 2>"${ERROR_LOG}"
+	eval "${EDITOR} ${EDITOR_VIEW_OPTIONS} ${TMP_FILE} 2>${ERROR_LOG}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
@@ -320,7 +326,7 @@ cmd_rm(){
 		exit 1
 	fi
 
-	# Name creation for record file
+	# Record filename creation
 	RECORD_NAME="${1}"
 	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
 
@@ -364,7 +370,7 @@ cmd_edit(){
 		exit 1
 	fi
 
-	# Name creation for record file
+	# Record filename creation
 	RECORD_NAME="${1}"
 	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
 
@@ -391,7 +397,7 @@ cmd_edit(){
 	hash_before=$(sha256sum "${TMP_FILE}" | awk '{ print $1 }')
 
 	# Open in editor to edit
-	${EDITOR} ${EDITOR_EDIT_OPTIONS} "${TMP_FILE}" 2>"${ERROR_LOG}"
+	eval "${EDITOR} ${EDITOR_EDIT_OPTIONS} ${TMP_FILE} 2>${ERROR_LOG}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
@@ -549,6 +555,122 @@ cmd_clear_tmp(){
 	rm -f "${TMP_STORAGE}"/*
 }
 
+#-------------------------------------------------------------------------------
+
+cmd_copy_login(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
+		exit $status
+	fi
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		exit 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		exit 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(pwgen 20 -1)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Decryption
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
+		cmd_clear_tmp
+		exit 1
+	fi
+
+	# Moving login (first string) to CLIPBOARD
+	head -n 1 "${TMP_FILE}" | tr -d '\n' | eval "${CLIPBOARD_APP} ${CLIPBOARD_APP_OPTIONS}"
+	status=$?
+	if (( status == 0 )); then
+		print_success "Login of ${RECORD_NAME} copied on the CLIPBOARD"
+	fi
+
+	# Clean all temporary files
+	cmd_clear_tmp
+
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_copy_pass(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
+		exit $status
+	fi
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		exit 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		exit 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(pwgen 20 -1)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Decryption
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
+		cmd_clear_tmp
+		exit 1
+	fi
+
+	# Moving password (second string) to CLIPBOARD
+	head -n 2 "${TMP_FILE}" | tail -n 1 | tr -d '\n' | eval "${CLIPBOARD_APP} ${CLIPBOARD_APP_OPTIONS}"
+	status=$?
+	if (( status == 0 )); then
+		print_success "Password of ${RECORD_NAME} copied on the CLIPBOARD"
+	fi
+
+	# Clean all temporary files
+	cmd_clear_tmp
+
+}
+
 ################################################################################
 ### Entry point ################################################################
 ################################################################################
@@ -564,6 +686,8 @@ main(){
 		view) shift; cmd_view "$@" ;;
 		rm) shift; cmd_rm "$@" ;;
 		edit) shift; cmd_edit "$@" ;;
+		cpl|copy-login) shift; cmd_copy_login "$@" ;;
+		cpp|copy-pass) shift; cmd_copy_pass "$@" ;;
 		new-folder) shift; cmd_new_folder "$@" ;;
 		rename-folder) shift; cmd_rename_folder "$@" ;;
 		rm-folder) shift; cmd_rm_folder "$@" ;;
