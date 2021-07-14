@@ -1,12 +1,119 @@
-#!/usr/bin/env bash
+#!/bin/bash
 
-if [[ -f /etc/spm.conf ]]
-then
-	source /etc/spm.conf
-fi
+################################################################################
+### ADDITIONAL FUNCTIONS #######################################################
+################################################################################
 
-if [[ -z $STORAGE_FOLDER ]]; then STORAGE_FOLDER=$HOME/.spm_storage; fi
-VERSION=0.8
+print_config_row(){
+	printf "%-24s= %s\n" "${1}" "${!1}"
+}
+
+#-------------------------------------------------------------------------------
+
+print_success(){
+	GREEN='\033[1;32m'
+	NC='\033[0m' # No Color
+	echo -e "${GREEN}"${1}"${NC}"
+}
+
+#-------------------------------------------------------------------------------
+
+print_warning(){
+	PURPLE='\033[1;35m'
+	NC='\033[0m' # No Color
+	echo -e "${PURPLE}Warning: "${1}"${NC}"
+}
+
+#-------------------------------------------------------------------------------
+
+print_error(){
+	RED='\033[1;31m'
+	NC='\033[0m' # No Color
+	echo -e "${RED}Error: "${1}"${NC}"
+}
+
+#-------------------------------------------------------------------------------
+
+confirmation(){
+	read -r -p "Are you sure? [y/N] " flag
+	flag=${flag:-N} # It means that "N" is default value
+	if [ $flag = "y" -o $flag = "Y" ]
+	then
+		return 0
+	fi
+	return 1
+}
+
+################################################################################
+### MAIN FUNCTIONS #############################################################
+################################################################################
+
+load_config(){
+	# Load default configuration. Lowest privileges
+	SPM_KEY_STORAGE="${HOME}"/.spm/storage
+	TMP_STORAGE=/tmp
+	EDITOR=nano
+	EDITOR_EDIT_OPTIONS="-l"
+	EDITOR_VIEW_OPTIONS="-v -l"
+	ERROR_LOG=/dev/null
+	VERSION=1.0rc1
+
+	# Load global configuration
+	GLOBAL_CONFIG=/etc/spm.conf
+	if [[ -f "${GLOBAL_CONFIG}" ]]; then
+		source "${GLOBAL_CONFIG}"
+	fi
+
+	# Load user configuration. Highest privileges
+	USER_CONFIG=${HOME}/.spm/spm.conf
+	if [[ -f "${USER_CONFIG}" ]]; then
+		source "${USER_CONFIG}"
+	fi
+}
+
+#-------------------------------------------------------------------------------
+
+check_tmp_storage_existence(){
+	if [[ -d "${TMP_STORAGE}" ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+#-------------------------------------------------------------------------------
+
+check_spm_key_storage_existence(){
+	if [[ -d "${SPM_KEY_STORAGE}" ]]; then
+		return 0
+	else
+		return 1
+	fi
+}
+
+#-------------------------------------------------------------------------------
+
+check_record_specification(){
+	if (( $# > 0 )); then
+		return 0
+	else
+		return 1
+	fi
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_print_config(){
+	print_config_row SPM_KEY_STORAGE
+	print_config_row TMP_STORAGE
+	print_config_row EDITOR
+	print_config_row EDITOR_EDIT_OPTIONS
+	print_config_row EDITOR_VIEW_OPTIONS
+	print_config_row ERROR_LOG
+	print_config_row VERSION
+}
+
+#-------------------------------------------------------------------------------
 
 cmd_help(){
 	cat <<-_EOF
@@ -14,124 +121,317 @@ cmd_help(){
 	  spm [command]
 	Commands:
 	  help, --help, -h      print this message
-	  init                  initialize spm storage
-	  ls                    show all encrypted files
-	  enc [file]            encrypt new file
-	  dec [file]            decrypt encrypted file
-	  rm [file]             remove encrypted file
-	  edit [file]           edit existing encrypted file
+	  init                  initialize spm key storage
+	  ls                    show all records
+	  new [record]          create new record
+	  view [record]         view existing record
+	  rm [record]           remove existing record
+	  edit [record]         edit existing record
+	  config                print spm aggregated config
 	  version               print spm version
 	_EOF
 }
 
+#-------------------------------------------------------------------------------
+
 cmd_init(){
-	if [[ -d $STORAGE_FOLDER ]]
-	then
-		echo "SPM storage already exists in $STORAGE_FOLDER"
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status == 0 )); then
+		print_warning "spm key storage already exists in '${SPM_KEY_STORAGE}'"
 	else
-		mkdir -p $STORAGE_FOLDER
-		echo "SPM storage initialized in $STORAGE_FOLDER"
+		mkdir -p "${SPM_KEY_STORAGE}"
+		print_success "spm key storage initialized in '${SPM_KEY_STORAGE}'"
+	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
 	fi
 }
+
+#-------------------------------------------------------------------------------
 
 cmd_ls(){
-	if [[ -d $STORAGE_FOLDER ]]
-	then
-		echo "SPM storage:"
-		# ls -1 $STORAGE_FOLDER
-		# tree $STORAGE_FOLDER
-		cd $STORAGE_FOLDER ; find . | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"; cd - > /dev/null
-	else
-		echo "SPM storage does not exist!"
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
 	fi
+
+	check_tmp_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "tmp storage '${TMP_STORAGE}' does not exist! You should create it manually!"
+	fi
+
+	tree -L 2 "${SPM_KEY_STORAGE}"
+	# cd $SPM_KEY_STORAGE ; find . | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"; cd - > /dev/null
 }
 
-cmd_enc(){
-	if [[ -d $STORAGE_FOLDER ]]
-	then
-		if (( $# > 0 ))
-		then
-			if [[ -f "$STORAGE_FOLDER/$1" ]]
-			then
-				echo 'File already exists!'
-			else
-				mkdir -p "$(dirname "$STORAGE_FOLDER/$1")"
-				touch "$STORAGE_FOLDER/$1.tmp"
-				nano "$STORAGE_FOLDER/$1.tmp"
-				gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp" && rm "$STORAGE_FOLDER/$1.tmp"
-			fi
-		else
-			echo "No encryption file specified!"
-		fi
-	else
-		echo "SPM storage does not exist!"
+#-------------------------------------------------------------------------------
+
+cmd_new(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
 	fi
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		exit 1
+	fi
+
+	# Name creation for record file
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ -f "${RECORD_FILE}" ]]; then
+		print_error 'record already exists!'
+		exit 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(pwgen 20 -1)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Typing record in tmp file with set editor
+	${EDITOR} ${EDITOR_EDIT_OPTIONS} "${TMP_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Symmetric encryption with gpg
+	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+	
+	# Moving ecnrypted file into spm key storage
+	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Clean all temporary files
+	rm -f "${TMP_FILE}"*
 }
 
-cmd_dec(){
-	if [[ -d $STORAGE_FOLDER ]]
-	then
-		if [ -f "$STORAGE_FOLDER/$1" ]
-		then
-			gpg -d --no-symkey-cache "$STORAGE_FOLDER/$1"
-		else
-			echo "No decryption file specified!"
-		fi
-	else
-		echo "SPM storage does not exist!"
+#-------------------------------------------------------------------------------
+
+cmd_view(){
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
 	fi
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		exit 1
+	fi
+
+	# Name creation for record file
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		exit 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(pwgen 20 -1)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Decryption
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Open in editor to view (view mode enabled if available)
+	${EDITOR} ${EDITOR_VIEW_OPTIONS} "${TMP_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Clean all temporary files
+	rm -f "${TMP_FILE}"*
 }
+
+#-------------------------------------------------------------------------------
 
 cmd_rm(){
-	if [[ -d $STORAGE_FOLDER ]]
-	then
-		if [ -f "$STORAGE_FOLDER/$1" ]
-		then
-			read -r -p "Are you sure? [y/N] " flag
-			flag=${flag:-N}
-			if [ $flag = "y" -o $flag = "Y" ]
-			then
-				rm "$STORAGE_FOLDER/$1"
-				echo "$1 removed"
-			fi
-		else
-			echo "File does not exist or not specified!"
-		fi
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
+	fi
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		exit 1
+	fi
+
+	# Name creation for record file
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		exit 1
+	fi
+
+	# Record file removing
+	confirmation
+	status=$?
+	if (( $status == 0 )); then
+		rm "${RECORD_FILE}"
+		print_success "${RECORD_NAME} successfully removed!"
 	else
-		echo "SPM storage does not exist!"
+		print_warning "removing rejected!"
 	fi
 }
+
+#-------------------------------------------------------------------------------
 
 cmd_edit(){
-	if [[ -d $STORAGE_FOLDER ]]
-	then
-		if [ -f "$STORAGE_FOLDER/$1" ]
-		then
-			gpg -d --no-symkey-cache -o "$STORAGE_FOLDER/$1.tmp" "$STORAGE_FOLDER/$1"
-			nano "$STORAGE_FOLDER/$1.tmp"
-			rm "$STORAGE_FOLDER/$1"
-			gpg -c -a -o "$STORAGE_FOLDER/$1" "$STORAGE_FOLDER/$1.tmp" && rm "$STORAGE_FOLDER/$1.tmp"
-		else
-			echo "File does not exist or not specified!"
-		fi
-	else
-		echo "SPM storage does not exist!"
+	check_spm_key_storage_existence
+	status=$?
+	if (( $status != 0 )); then
+		print_error "spm key storage does not exist!"
+		exit $status
 	fi
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		exit 1
+	fi
+
+	# Name creation for record file
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SPM_KEY_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		exit 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(pwgen 20 -1)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Decryption
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Calculate hash of temp file before editing for further comparing
+	hash_before=$(sha256sum "${TMP_FILE}" | awk '{ print $1 }')
+
+	# Open in editor to edit
+	${EDITOR} ${EDITOR_EDIT_OPTIONS} "${TMP_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "${EDITOR} closed unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Calculate hash of temp file after editing for further comparing
+	hash_after=$(sha256sum "${TMP_FILE}" | awk '{ print $1 }')
+
+	# Hash comparision
+	if [[ $hash_before == $hash_after ]]; then
+		print_error "record has not been edited. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Symmetric encryption with gpg
+	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+	
+	# Moving ecnrypted file into spm key storage
+	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${ERROR_LOG}"
+	status=$?
+	if (( status != 0 )); then
+		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
+		rm -f "${TMP_FILE}"*
+		exit 1
+	fi
+
+	# Clean all temporary files
+	rm -f "${TMP_FILE}"*
 }
 
-cmd_ver(){
+#-------------------------------------------------------------------------------
+
+cmd_print_version(){
 	echo "$VERSION"
 }
 
-case "$1" in
-	help|--help|-h) cmd_help ;;
-	init) cmd_init ;;
-	ls) cmd_ls ;;
-	enc) shift; cmd_enc "$@" ;;
-	dec) shift; cmd_dec "$@" ;;
-	rm) shift; cmd_rm "$@" ;;
-	edit) shift; cmd_edit "$@" ;;
-	version) cmd_ver ;;
-esac
+################################################################################
+### Entry point ################################################################
+################################################################################
 
-exit 0
+main(){
+	load_config
+
+	case "$1" in
+		help|--help|-h) cmd_help ;;
+		init) cmd_init ;;
+		ls) cmd_ls ;;
+		new) shift; cmd_new "$@" ;;
+		view) shift; cmd_view "$@" ;;
+		rm) shift; cmd_rm "$@" ;;
+		edit) shift; cmd_edit "$@" ;;
+		config) cmd_print_config ;;
+		version) cmd_print_version ;;
+	esac
+
+	exit 0
+}
+
+main "$@"
+
+#-------------------------------------------------------------------------------

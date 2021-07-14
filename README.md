@@ -18,7 +18,15 @@ At initializing `spm` creates `.spm_storage` (by default) folder in user's home 
 
 Requirements:
 * bash
-* gpg
+* gnupg2
 * nano
+* pinentry-curses (for linux)
 
 From version 0.6 you can use `/etc/spm.conf` to override script variables (like `STORAGE_FOLDER`).
+
+For `pinentry-curses` setting:
+
+```bash
+echo "pinentry-program /usr/bin/pinentry-curses" > ~/.gnupg/gpg-agent.conf
+gpgconf --reload gpg-agent
+```
