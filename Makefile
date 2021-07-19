@@ -2,13 +2,13 @@ SHELL := /bin/bash
 PLATFORM := $(shell uname -o)
 GNU_LINUX := GNU/Linux
 GNU_LINUX_DEPENDENCY_PACKAGES := coreutils gnupg2 pwgen nano tree xclip
-CYGWIN := Cygwin
-MSYS := Msys
+# CYGWIN := Cygwin
+# MSYS := Msys
 
 install: installation-4-$(PLATFORM)
 uninstall: uninstall-4-$(PLATFORM)
 
-# GNU Linux targets
+## GNU Linux targets
 installation-4-$(GNU_LINUX): install-script gnu-linux-depends-install
 
 gnu-linux-depends-install:
@@ -24,15 +24,15 @@ gnu-linux-depends-install:
 
 uninstall-4-$(GNU_LINUX): uninstall-script
 
-# Cygwin targets
-installation-4-$(CYGWIN): install-script
-uninstall-4-$(CYGWIN): install-script
+## Cygwin targets
+# installation-4-$(CYGWIN): install-script
+# uninstall-4-$(CYGWIN): install-script
 
-# Msys targets
-installation-4-$(MSYS): install-script
-uninstall-4-$(MSYS): install-script
+## Msys targets
+# installation-4-$(MSYS): install-script
+# uninstall-4-$(MSYS): install-script
 
-# Common targets
+## Common targets
 install-script:
 	cp ./spm /usr/bin/spm
 uninstall-script:
