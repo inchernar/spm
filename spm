@@ -104,7 +104,7 @@ random_string(){
 ################################################################################
 
 readonly USER_CONFIG="${HOME}/.spm" # @TODO maybe "${HOME}/.config/spm.conf"
-readonly VERSION=1.1rc3
+readonly VERSION=1.1.1
 
 #-------------------------------------------------------------------------------
 
