@@ -279,7 +279,23 @@ cmd_create_user_config(){
 	fi
 
 	touch "${USER_CONFIG}" && chmod 600 "${USER_CONFIG}"
-	# @TODO write template to config file
+	status=$?
+	if (( $status != 0 )); then
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	cat>"${USER_CONFIG}" <<-_EOF
+	## Spm key storage path. It should be folder with umask 700
+	## only for current user.
+	## Default: $HOME/SPMKeyStorage
+	# KEY_STORAGE=
+
+	## Folder for temporary files and folders generating.
+	## Highly recommended to use the 'tmpfs' folder.
+	## Default: /dev/shm (if exists) or /tmp
+	# TMP_STORAGE_ROOT=
+	_EOF
 	status=$?
 	if (( $status != 0 )); then
 		print_debug "'${FUNCNAME}' function ends with code 1!"
