@@ -32,7 +32,7 @@
 
 ## Set 'true' to enable debug mode.
 ## Another value (or empty and undefined) is equal to 'false'.
-readonly DEBUG=true
+# readonly DEBUG=true
 if [[ ! -z $DEBUG ]] && [[ $DEBUG = true ]]; then
 	readonly DEBUG_STREAM=/dev/stdout
 	echo -e "\033[1;31mDEBUG mode ON!\033[0m"
