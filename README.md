@@ -39,7 +39,7 @@ Dependencies:
 
 Highly recommended to install a console program for master-password entering `pinentry-curses` or `pinentry-tty`.
 
-For example, nn Debian you can install by command:
+For example, in Debian you can install it by command:
 
 ```bash
 sudo apt install pinentry-curses.
