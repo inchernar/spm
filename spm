@@ -1,14 +1,42 @@
 #!/bin/bash
 
 ################################################################################
-### GLOBAL VARIABLES ###########################################################
+### GLOBAL VARIABLES AND CONFIGURATIONS ########################################
 ################################################################################
 
 ## Set 'true' to enable debug mode.
 ## Another value (or empty and undefined) is equal to 'false'.
 readonly DEBUG=true
+if [[ ! -z $DEBUG ]] && [[ $DEBUG = true ]]; then
+	readonly DEBUG_STREAM=/dev/stdout
+	echo -e "\033[1;31mDEBUG mode ON!\033[0m"
+else
+	readonly DEBUG_STREAM=/dev/null
+fi
+
+#-------------------------------------------------------------------------------
+
 readonly SPM_FOLDER="${HOME}/.spm"
-readonly VERSION=1.1rc1
+readonly VERSION=1.1rc2
+
+#-------------------------------------------------------------------------------
+
+# Load user configuration. Highest privileges
+USER_CONFIG=${SPM_FOLDER}/spm.conf
+if [[ -f "${USER_CONFIG}" ]]; then
+	source "${USER_CONFIG}"
+fi
+
+# Load defaults for undefined configurations. Lowest privileges
+if [[ -z $SPM_KEY_STORAGE ]]; then SPM_KEY_STORAGE="${SPM_FOLDER}/spm_key_storage"; fi
+if [[ -z $SPM_TMP_STORAGE ]]; then
+	if [[ -d /dev/shm ]]; then
+		CANDIDATE=/dev/shm
+	else
+		CANDIDATE=/tmp
+	fi
+	SPM_TMP_STORAGE="${CANDIDATE}/spm_tmp_storage_$(whoami)"
+fi
 
 ################################################################################
 ### ADDITIONAL FUNCTIONS #######################################################
@@ -47,13 +75,8 @@ print_error(){
 print_debug(){
 	CYAN='\033[1;36m'
 	NC='\033[0m' # No Color
-	if [[ ! -z $DEBUG ]]; then
-		if [[ $DEBUG = true ]]; then
-			if [[ -z $OUTPUT_LOG ]]; then
-				local OUTPUT_LOG=/dev/stdout
-			fi
-			echo -e "${CYAN}DEBUG: "${1}"${NC}" > "${OUTPUT_LOG}"
-		fi
+	if [[ ! -z $DEBUG ]] && [[ $DEBUG = true ]]; then
+		echo -e "${CYAN}DEBUG: "${1}"${NC}" > "${DEBUG_STREAM}"
 	fi
 }
 
@@ -78,32 +101,6 @@ random_string(){
 ################################################################################
 ### MAIN FUNCTIONS #############################################################
 ################################################################################
-
-load_config(){
-	print_debug "'${FUNCNAME}' function started..."
-
-	print_debug "Load user configuration. Highest privileges"
-	USER_CONFIG=${SPM_FOLDER}/spm.conf
-	if [[ -f "${USER_CONFIG}" ]]; then
-		source "${USER_CONFIG}"
-	fi
-
-	print_debug "Load defaults for undefined configurations. Lowest privileges"
-	if [[ -z $SPM_KEY_STORAGE ]]; then SPM_KEY_STORAGE="${SPM_FOLDER}/spm_key_storage"; fi
-	if [[ -z $SPM_TMP_STORAGE ]]; then
-		if [[ -d /dev/shm ]]; then
-			CANDIDATE=/dev/shm
-		else
-			CANDIDATE=/tmp
-		fi
-		SPM_TMP_STORAGE="${CANDIDATE}/spm_tmp_storage_$(whoami)"
-	fi
-	if [[ -z $OUTPUT_LOG ]]; then OUTPUT_LOG=/dev/null; fi
-
-	print_debug "'${FUNCNAME}' function ends!"
-}
-
-#-------------------------------------------------------------------------------
 
 general_command_processing(){
 	print_debug "'${FUNCNAME}' function started..."
@@ -195,7 +192,6 @@ cmd_print_config(){
 
 	print_config_row SPM_KEY_STORAGE
 	print_config_row SPM_TMP_STORAGE
-	print_config_row OUTPUT_LOG
 
 	print_debug "'${FUNCNAME}' function ends!"
 }
@@ -233,6 +229,9 @@ cmd_help(){
 #-------------------------------------------------------------------------------
 
 cmd_init(){
+	# @TODO create SPM_FOLDER folder and etc.
+	# create spm.conf into SPM_FOLDER.
+
 	print_debug "'${FUNCNAME}' function started..."
 
 	if [[ -d "${SPM_KEY_STORAGE}" ]]; then
@@ -283,7 +282,7 @@ cmd_new(){
 	TMP_FILE="${SPM_TMP_STORAGE}/${RANDOM_NAME}"
 
 	# Typing record in tmp file with set editor
-	nano -l ${TMP_FILE} 2>${OUTPUT_LOG}
+	nano -l ${TMP_FILE} 2>${DEBUG_STREAM}
 	status=$?
 	if (( status != 0 )); then
 		print_error "nano closed unexpectedly. All tempfiles will be removed!"
@@ -291,7 +290,7 @@ cmd_new(){
 	fi
 
 	# Symmetric encryption with gpg
-	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${OUTPUT_LOG}"
+	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
@@ -299,7 +298,7 @@ cmd_new(){
 	fi
 	
 	# Moving ecnrypted file into spm key storage
-	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${OUTPUT_LOG}"
+	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
@@ -337,7 +336,7 @@ cmd_view(){
 	TMP_FILE="${SPM_TMP_STORAGE}/${RANDOM_NAME}"
 
 	# Decryption
-	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${OUTPUT_LOG}"
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
@@ -345,7 +344,7 @@ cmd_view(){
 	fi
 
 	# Open in editor to view (view mode enabled if available)
-	nano -l -v ${TMP_FILE} 2>${OUTPUT_LOG}
+	nano -l -v ${TMP_FILE} 2>${DEBUG_STREAM}
 	status=$?
 	if (( status != 0 )); then
 		print_error "nano closed unexpectedly. All tempfiles will be removed!"
@@ -453,7 +452,7 @@ cmd_edit(){
 	TMP_FILE="${SPM_TMP_STORAGE}/${RANDOM_NAME}"
 
 	# Decryption
-	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${OUTPUT_LOG}"
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
@@ -464,7 +463,7 @@ cmd_edit(){
 	hash_before=$(sha256sum "${TMP_FILE}" | awk '{ print $1 }')
 
 	# Open in editor to edit
-	nano -l ${TMP_FILE} 2>${OUTPUT_LOG}
+	nano -l ${TMP_FILE} 2>${DEBUG_STREAM}
 	status=$?
 	if (( status != 0 )); then
 		print_error "nano closed unexpectedly. All tempfiles will be removed!"
@@ -481,7 +480,7 @@ cmd_edit(){
 	fi
 
 	# Symmetric encryption with gpg
-	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${OUTPUT_LOG}"
+	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
@@ -489,7 +488,7 @@ cmd_edit(){
 	fi
 	
 	# Moving ecnrypted file into spm key storage
-	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${OUTPUT_LOG}"
+	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
@@ -644,7 +643,7 @@ cmd_copy_login(){
 	TMP_FILE="${SPM_TMP_STORAGE}/${RANDOM_NAME}"
 
 	# Decryption
-	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${OUTPUT_LOG}"
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
@@ -690,7 +689,7 @@ cmd_copy_pass(){
 	TMP_FILE="${SPM_TMP_STORAGE}/${RANDOM_NAME}"
 
 	# Decryption
-	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${OUTPUT_LOG}"
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
 	status=$?
 	if (( status != 0 )); then
 		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
@@ -715,11 +714,7 @@ cmd_copy_pass(){
 ################################################################################
 
 main(){
-	print_debug "-----------------------------------------"
 	print_debug "'${FUNCNAME}' function started..."
-
-	load_config
-	print_debug "previous function ended with code $?"
 
 	general_command_processing "$@"
 	print_debug "previous function ended with code $?"
