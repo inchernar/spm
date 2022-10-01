@@ -1,0 +1,530 @@
+#!/bin/bash
+
+################################################################################
+### LICENSE ####################################################################
+################################################################################
+
+# MIT License
+#
+# Copyright (c) ilsuryusipov
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+#
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+#
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+readonly VERSION=2.0.0
+
+################################################################################
+### utils ######################################################################
+################################################################################
+
+print_success(){
+	GREEN='\033[1;32m'
+	NC='\033[0m' # No Color
+	echo -e "${GREEN}"${1}"${NC}"
+}
+
+#-------------------------------------------------------------------------------
+
+print_warning(){
+	PURPLE='\033[1;35m'
+	NC='\033[0m' # No Color
+	echo -e "${PURPLE}Warning: "${1}"${NC}"
+}
+
+#-------------------------------------------------------------------------------
+
+print_error(){
+	RED='\033[1;31m'
+	NC='\033[0m' # No Color
+	echo -e "${RED}Error: "${1}"${NC}"
+}
+
+#-------------------------------------------------------------------------------
+
+print_debug(){
+	CYAN='\033[1;36m'
+	NC='\033[0m' # No Color
+	if [[ ! -z $DEBUG ]] && [[ $DEBUG = true ]]; then
+		echo -e "${CYAN}DEBUG: "${1}"${NC}" > "${DEBUG_STREAM}"
+	fi
+}
+
+#-------------------------------------------------------------------------------
+
+confirmation(){
+	read -r -p "Are you sure? [y/N] " flag
+	flag=${flag:-N} # It means that "N" is default value
+	if [ $flag = "y" -o $flag = "Y" ]; then
+		return 0
+	fi
+	return 1
+}
+
+#-------------------------------------------------------------------------------
+
+random_string(){
+	echo -n $(dd if=/dev/urandom count=1 2>/dev/null | tr -dc '[:alpha:]' | cut -b 1-20)
+}
+
+################################################################################
+### configuration ##############################################################
+################################################################################
+
+## Set 'true' to enable debug mode.
+## Another value (or empty and undefined) is equal to 'false'.
+# @TODO set to config file
+readonly DEBUG=true
+if [[ ! -z $DEBUG ]] && [[ $DEBUG = true ]]; then
+	readonly DEBUG_STREAM=/dev/stdout
+	echo -e "\033[1;31mDEBUG mode ON!\033[0m"
+else
+	readonly DEBUG_STREAM=/dev/null
+fi
+
+readonly USER_CONFIG="${HOME}/.gpgw"
+
+#-------------------------------------------------------------------------------
+
+# Load user configuration. Highest privileges
+if [[ -f "${USER_CONFIG}" ]]; then
+	source "${USER_CONFIG}"
+fi
+
+# Load defaults for undefined configurations. Lowest privileges
+if [[ -z $SECRETS_STORAGE ]]; then SECRETS_STORAGE="${HOME}/.secrets"; fi
+if [[ -z $TMP_STORAGE ]]; then
+	if [[ -d /dev/shm ]]; then
+		TMP_STORAGE=/dev/shm
+	else
+		TMP_STORAGE=/tmp
+	fi
+fi
+# TMP_STORAGE="${TMP_STORAGE}/$(random_string)"
+
+################################################################################
+### main #######################################################################
+################################################################################
+
+general_command_processing(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	action=$1
+	# shift
+
+	case $action in
+		help|--help|-h)      			cmd_help ;;
+		ls|new|view|preview|edit|rm) 	action_command_processing "$@" ;;
+		*)                   			invalid_parameter_handler "$@" ;;
+	esac
+
+	status=$?
+	if (( $status != 0 )); then
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+action_command_processing(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	print_debug "check gpgw key storage '${SECRETS_STORAGE}' existence..."
+	if [[ ! -d "${SECRETS_STORAGE}" ]]; then
+		print_error "gpgw key storage '${SECRETS_STORAGE}' does not exist!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	init_tmp_storage
+
+	case "$1" in
+		ls)                cmd_ls ;;
+		new)               shift; cmd_new "$@" ;;
+		view)              shift; cmd_view "$@" ;;
+		preview)           shift; cmd_preview "$@" ;;
+		move)              shift; cmd_move "$@" ;;
+		rm)                shift; cmd_rm "$@" ;;
+		edit)              shift; cmd_edit "$@" ;;
+		cpl|copy-login)    shift; cmd_copy_login "$@" ;;
+		cpp|copy-pass)     shift; cmd_copy_pass "$@" ;;
+		new-folder)        shift; cmd_new_folder "$@" ;;
+		rename-folder)     shift; cmd_rename_folder "$@" ;;
+		rm-folder)         shift; cmd_rm_folder "$@" ;;
+	esac
+
+	status=$?
+	if (( $status != 0 )); then
+		destroy_tmp_storage
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	destroy_tmp_storage
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+invalid_parameter_handler(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	print_error "'${1}' is invalid parameter!"
+
+	print_debug "'${FUNCNAME}' function is error generator, so it ends with code 1! "
+	return 1
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_help(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	cat <<-_EOF
+	Usage:
+	  gpgw [command]
+	Commands:
+	  help, --help, -h          print this message
+	  ls                        show all records in key storage
+	  new  [record]             create new record
+	  view [record]             view specified record
+	  preview [record]          preview specified record (without decoding)
+	  edit [record]             edit specified record
+	  rm   [record]             remove specified record
+	  version                   print gpgw version
+	_EOF
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_ls(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	tree -L 10 "${SECRETS_STORAGE}"
+	# cd $SECRETS_STORAGE ; find . | sed -e "s/[^-][^\/]*\// |/g" -e "s/|\([^ ]\)/|-\1/"; cd - > /dev/null
+	status=$?
+	if (( $status != 0 )); then
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_new(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SECRETS_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ -f "${RECORD_FILE}" ]]; then
+		print_error 'record already exists!'
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(random_string)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Typing record in tmp file with set editor
+	nano -l ${TMP_FILE} 2>${DEBUG_STREAM}
+	status=$?
+	if (( $status != 0 )); then
+		print_error "nano closed unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Symmetric encryption with gpg
+	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${DEBUG_STREAM}"
+	status=$?
+	if (( $status != 0 )); then
+		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+	
+	# Moving ecnrypted file into gpgw key storage
+	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
+	status=$?
+	if (( $status != 0 )); then
+		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_success "Record '${RECORD_NAME}' successfully added!"
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_view(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SECRETS_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(random_string)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Decryption
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
+	status=$?
+	if (( $status != 0 )); then
+		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Open in editor to view (view mode enabled if available)
+	nano -l -v ${TMP_FILE} 2>${DEBUG_STREAM}
+	status=$?
+	if (( $status != 0 )); then
+		print_error "nano closed unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_preview(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SECRETS_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Open in editor to view (view mode enabled if available)
+	nano -l -v ${RECORD_FILE} 2>${DEBUG_STREAM}
+	status=$?
+	if (( $status != 0 )); then
+		print_error "nano closed unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_rm(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SECRETS_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record file removing confirmation
+	confirmation
+	status=$?
+	if (( $status != 0 )); then
+		print_warning "removing rejected!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record file removing
+	rm "${RECORD_FILE}"
+	status=$?
+	if (( $status != 0 )); then
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_success "Record ${RECORD_NAME} successfully removed!"
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_edit(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	# Check record specification
+	if (( $# == 0 )); then
+		print_error "no record specified!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Record filename creation
+	RECORD_NAME="${1}"
+	RECORD_FILE="${SECRETS_STORAGE}/${RECORD_NAME}"
+
+	# Check record existence
+	if [[ ! -f "${RECORD_FILE}" ]]; then
+		print_error "specified record does not exist!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Random name creation for temp file
+	RANDOM_NAME=$(random_string)
+	TMP_FILE="${TMP_STORAGE}/${RANDOM_NAME}"
+
+	# Decryption
+	gpg -d --no-symkey-cache -o "${TMP_FILE}" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
+	status=$?
+	if (( $status != 0 )); then
+		print_error "decryption canceled unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Calculate hash of temp file before editing for further comparing
+	hash_before=$(sha256sum "${TMP_FILE}" | awk '{ print $1 }')
+
+	# Open in editor to edit
+	nano -l ${TMP_FILE} 2>${DEBUG_STREAM}
+	status=$?
+	if (( $status != 0 )); then
+		print_error "nano closed unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Calculate hash of temp file after editing for further comparing
+	hash_after=$(sha256sum "${TMP_FILE}" | awk '{ print $1 }')
+
+	# Hash comparision
+	if [[ $hash_before == $hash_after ]]; then
+		print_error "record has not been edited. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	# Symmetric encryption with gpg
+	gpg -c --no-symkey-cache -a -o "${TMP_FILE}.gpg" "${TMP_FILE}" 2>"${DEBUG_STREAM}"
+	status=$?
+	if (( $status != 0 )); then
+		print_error "encryption canceled unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+	
+	# Moving ecnrypted file into gpgw key storage
+	mv "${TMP_FILE}.gpg" "${RECORD_FILE}" 2>"${DEBUG_STREAM}"
+	status=$?
+	if (( $status != 0 )); then
+		print_error "moving file canceled unexpectedly. All tempfiles will be removed!"
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+#-------------------------------------------------------------------------------
+
+cmd_print_version(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	echo "$VERSION"
+
+	print_debug "'${FUNCNAME}' function ends with code 0"
+}
+
+################################################################################
+### Entry point ################################################################
+################################################################################
+
+main(){
+	print_debug "'${FUNCNAME}' function started..."
+
+	general_command_processing "$@"
+
+	status=$?
+	if (( $status != 0 )); then
+		print_debug "'${FUNCNAME}' function ends with code 1!"
+		return 1
+	fi
+
+	print_debug "'${FUNCNAME}' function exit with code 0"
+}
+
+main "$@"
+
+#-------------------------------------------------------------------------------
