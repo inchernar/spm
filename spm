@@ -6,7 +6,7 @@
 
 # MIT License
 #
-# Copyright (c) 2020, 2021, 2022 ilsuryusipov
+# Copyright (c) 2020, 2021, 2022, 2023 ilsuryusipov
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
 # of this software and associated documentation files (the "Software"), to deal
@@ -96,16 +96,15 @@ confirmation(){
 #-------------------------------------------------------------------------------
 
 random_string(){
-	echo -n $(pwgen 40 -1 -s)
+	echo -n $(echo $RANDOM | md5sum | head -c 32)
 }
 
 ################################################################################
 ### GLOBAL VARIABLES AND CONFIGURATIONS ########################################
 ################################################################################
 
-readonly DEFAULT_FOLDER="${HOME}/.spm"
-readonly USER_CONFIG="${DEFAULT_FOLDER}/spm.conf"
-readonly VERSION=2.0.0
+readonly USER_CONFIG="~/.config/spm.conf"
+readonly VERSION=3.0.0
 
 #-------------------------------------------------------------------------------
 
@@ -115,7 +114,7 @@ if [[ -f "${USER_CONFIG}" ]]; then
 fi
 
 # Load defaults for undefined configurations. Lowest privileges
-if [[ -z $KEY_STORAGE ]]; then KEY_STORAGE="${DEFAULT_FOLDER}/storage"; fi
+if [[ -z $KEY_STORAGE ]]; then KEY_STORAGE="~/.cache/spm"; fi
 if [[ -z $TMP_STORAGE_ROOT ]]; then
 	if [[ -d /dev/shm ]]; then
 		TMP_STORAGE_ROOT=/dev/shm

@@ -31,7 +31,6 @@ Dependencies:
 * `gnupg2`
 * `coreutils` (`sha256sum` utility)
 * `nano`
-* `pwgen`
 * `tree`
 * `xclip`
 
